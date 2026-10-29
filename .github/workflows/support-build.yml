@@ -20,6 +20,7 @@ on:
         required: false
         type: string
         default: "[]"
+
 permissions:
   contents: read
   actions: read
@@ -50,37 +51,17 @@ jobs:
 
   package:
     needs: build
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-22.04
     steps:
-      - name: Download Windows builds
+      - name: Download Windows x64 build
         uses: actions/download-artifact@v4
         with:
-          pattern: rustdesk-unsigned-windows-*
+          pattern: rustdesk-unsigned-windows-x86_64
           path: raw/windows
           merge-multiple: false
 
-      - name: Download macOS builds
-        uses: actions/download-artifact@v4
-        with:
-          pattern: betterdesk-unsigned-macos-*
-          path: raw/macos
-          merge-multiple: false
-
-      - name: Download Linux x86_64 build
-        uses: actions/download-artifact@v4
-        with:
-          pattern: betterdesk-*-x86_64.deb
-          path: raw/linux-x86_64
-          merge-multiple: true
-
-      - name: Download Linux aarch64 build
-        uses: actions/download-artifact@v4
-        with:
-          pattern: betterdesk-*-aarch64.deb
-          path: raw/linux-aarch64
-          merge-multiple: true
-
-      - name: Package embedded Support artifacts
+      - name: Package embedded Support artifacts (Windows x64)
         shell: bash
         env:
           GENERATION_ID: ${{ inputs.generation_id }}
@@ -88,47 +69,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-
-          for arch in x86_64 aarch64; do
-            src="$(find "raw/windows" -type d -path "*rustdesk-unsigned-windows-${arch}/rustdesk" -print -quit)"
-            test -n "${src}"
-            mkdir -p "stage/windows-${arch}"
-            cp -a "${src}/." "stage/windows-${arch}/"
-            if find "stage/windows-${arch}" -iname custom.txt -o -name .custom-txt-here | grep -q .; then
-              echo "External config found in Windows artifact" >&2
-              exit 1
-            fi
-            (cd stage && zip -qr "../out/betterdesk-support-${GENERATION_ID}-windows-${arch}.zip" "windows-${arch}")
-          done
-
-          for arch in x86_64 aarch64; do
-            archive="$(find "raw/macos" -type f -name "*-${arch}-app.tar.gz" -print -quit)"
-            test -n "${archive}"
-            mkdir -p "stage/macos-${arch}"
-            tar -xzf "${archive}" -C "stage/macos-${arch}"
-            if find "stage/macos-${arch}" -iname custom.txt -o -name .custom-txt-here | grep -q .; then
-              echo "External config found in macOS artifact" >&2
-              exit 1
-            fi
-            tar -C stage -czf "out/betterdesk-support-${GENERATION_ID}-macos-${arch}.tar.gz" "macos-${arch}"
-          done
-
-          for arch in x86_64 aarch64; do
-            deb="$(find "raw/linux-${arch}" -type f -name '*.deb' -print -quit)"
-            test -n "${deb}"
-            mkdir -p "stage/linux-${arch}/root"
-            dpkg-deb -x "${deb}" "stage/linux-${arch}/root"
-            if find "stage/linux-${arch}" -iname custom.txt -o -name .custom-txt-here | grep -q .; then
-              echo "External config found in Linux artifact" >&2
-              exit 1
-            fi
-            tar -C "stage/linux-${arch}" -czf "out/betterdesk-support-${GENERATION_ID}-linux-${arch}.tar.gz" root
-          done
+          arch=x86_64
+          src="$(find "raw/windows" -type d -path "*rustdesk-unsigned-windows-${arch}/rustdesk" -print -quit)"
+          test -n "${src}"
+          mkdir -p "stage/windows-${arch}"
+          cp -a "${src}/." "stage/windows-${arch}/"
+          if find "stage/windows-${arch}" -iname custom.txt -o -name .custom-txt-here | grep -q .; then
+            echo "External config found in Windows artifact" >&2
+            exit 1
+          fi
+          (cd stage && zip -qr "../out/betterdesk-support-${GENERATION_ID}-windows-${arch}.zip" "windows-${arch}")
 
           python3 - <<'PY'
           import hashlib, json, os
           from pathlib import Path
-
           root = Path("out")
           assets = []
           for item in sorted(root.iterdir()):
@@ -148,8 +102,6 @@ jobs:
           }
           (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
           PY
-
-          ! find out -iname custom.txt -o -name .custom-txt-here | grep -q .
 
       - name: Upload embedded Support artifacts
         uses: actions/upload-artifact@v4
