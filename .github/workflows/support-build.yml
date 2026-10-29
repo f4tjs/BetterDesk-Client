@@ -15,7 +15,11 @@ on:
         description: "Expected BetterDesk-Client commit"
         required: true
         type: string
-
+      targets_json:
+        description: "Plataformas solicitadas pelo painel"
+        required: false
+        type: string
+        default: "[]"
 permissions:
   contents: read
   actions: read
